@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📱 最近的消防栓定位服務</title>
+    <title>📱 最近的 5 個消防栓定位服務</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha204-Jj0p59h61Hw84D76gX+rPzK52t/u3aFw10d0y7lU3Z55W6aD05k2F5k49E2b3I0tB"
         crossorigin=""/>
@@ -58,7 +58,7 @@
         }
 
 
-        // ============== 定位與標記邏輯 (包含導航連結) ==============
+        // ============== 定位與標記邏輯 (最近 5 個消防栓) ==============
 
         // 處理定位成功的函式：在這裡進行距離計算和標記
         function onLocationFound(pos, fireHydrantData) {
@@ -85,9 +85,9 @@
                 };
             });
             
-            // 3. 排序並取出最近的三個消防栓
+            // 3. 排序並取出最近的五個消防栓
             hydrantsWithDistance.sort((a, b) => a.distance - b.distance);
-            const nearestHydrants = hydrantsWithDistance.slice(0, 3);
+            const nearestHydrants = hydrantsWithDistance.slice(0, 5); // 篩選出最近的 5 個
             
             // 4. 移除舊的消防栓標記
             map.eachLayer(layer => {
@@ -96,7 +96,7 @@
                 }
             });
 
-            // 5. 在地圖上標記最近的三個消防栓 (紅色圖標)
+            // 5. 在地圖上標記最近的五個消防栓 (紅色圖標)
             const fireHydrantIcon = L.icon({
                 iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
                 shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -109,9 +109,8 @@
             nearestHydrants.forEach((hydrant, index) => {
                 const distanceInMeters = (hydrant.distance * 1000).toFixed(0); // 轉換為公尺
                 
-                // 🌟 核心修改點：建立 Google 地圖導航連結
-                // Google 地圖導航 URL 格式：從當前位置到 daddr (目的地址: 經緯度)
-                const googleMapsUrl = `http://maps.google.com/maps?daddr=${hydrant.lat},${hydrant.lng}`;
+                // 🌟 修正後的 Google 地圖導航連結：使用標準 maps/dir 格式
+                const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${hydrant.lat},${hydrant.lng}&travelmode=driving`;
                 
                 L.marker([hydrant.lat, hydrant.lng], { icon: fireHydrantIcon }).addTo(map)
                     .bindPopup(`
@@ -119,21 +118,21 @@
                         距離: **${distanceInMeters} 公尺**<br>
                         <hr style="margin: 5px 0;">
                         <a href="${googleMapsUrl}" target="_blank" 
-                           style="display: block; padding: 5px; background-color: #4285F4; color: white; text-align: center; text-decoration: none; border-radius: 3px; font-weight: bold;">
-                           🚗 開始導航 (Google Maps)
+                            style="display: block; padding: 5px; background-color: #4285F4; color: white; text-align: center; text-decoration: none; border-radius: 3px; font-weight: bold;">
+                            🚗 開始導航 (Google Maps)
                         </a>
                     `);
             });
             
             if (fireHydrantData.length === 0) {
                  L.popup()
-                    .setLatLng(userLatLng)
-                    .setContent("警告：GeoJSON 資料載入成功但為空。請檢查 hydrants.geojson 內容。")
-                    .openOn(map);
+                     .setLatLng(userLatLng)
+                     .setContent("警告：GeoJSON 資料載入成功但為空。請檢查 hydrants.geojson 內容。")
+                     .openOn(map);
             }
         }
 
-        // 處理定位失敗的函式
+        // 處理定位失敗的函式 (保持不變)
         function onLocationError(error) {
             let errorMessage = "無法取得您的位置。請檢查您的定位設定是否開啟。";
             
@@ -150,7 +149,7 @@
 
         // ============== 應用程式啟動邏輯 (GeoJSON 資料載入) ==============
 
-        // 載入並解析 GeoJSON 檔案
+        // 載入並解析 GeoJSON 檔案 (保持不變)
         async function loadHydrantData() {
             try {
                 // 嘗試從 hydrants.geojson 檔案載入資料
@@ -189,7 +188,7 @@
             }
         }
 
-        // 應用程式主要啟動點
+        // 應用程式主要啟動點 (保持順序：載入資料 -> 取得定位)
         async function initApp() {
             const hydrantData = await loadHydrantData();
             
