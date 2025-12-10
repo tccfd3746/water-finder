@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📱 最近的消防栓定位服務</title>
+    <title>📱 300 公尺內消防栓搜尋</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha204-Jj0p59h61Hw84D76gX+rPzK52t/u3aFw10d0y7lU3Z55W6aD05k2F5k49E2b3I0tB"
         crossorigin=""/>
@@ -31,6 +31,11 @@
         crossorigin=""></script>
 
     <script>
+        // ============== 應用程式核心設定 ==============
+
+        // 🎯 核心參數：設定搜尋的半徑，單位是公尺 (Meters)
+        const SEARCH_RADIUS_METERS = 300; 
+
         // ============== 變數與地圖初始化 ==============
 
         const map = L.map('map').setView([24.1500, 120.6800], 13); // 預設視角
@@ -58,9 +63,8 @@
         }
 
 
-        // ============== 定位與標記邏輯 (包含導航連結) ==============
+        // ============== 定位與標記邏輯 (300 公尺範圍篩選) ==============
 
-        // 處理定位成功的函式：在這裡進行距離計算和標記
         function onLocationFound(pos, fireHydrantData) {
             const userLat = pos.coords.latitude;
             const userLng = pos.coords.longitude;
@@ -74,29 +78,32 @@
             userMarker = L.marker(userLatLng).addTo(map)
                 .bindPopup("<b>您的目前位置</b>").openPopup();
             
-            map.setView(userLatLng, 15);
-            
-            // 2. 計算所有消防栓與使用者的距離
-            const hydrantsWithDistance = fireHydrantData.map(hydrant => {
-                const distance = getDistance(userLat, userLng, hydrant.lat, hydrant.lng);
-                return {
-                    ...hydrant,
-                    distance: distance // 距離單位是公里 (km)
-                };
-            });
-            
-            // 3. 排序並取出最近的三個消防栓
-            hydrantsWithDistance.sort((a, b) => a.distance - b.distance);
-            const nearestHydrants = hydrantsWithDistance.slice(0, 3);
-            
-            // 4. 移除舊的消防栓標記
+            // 2. 移除舊的消防栓標記
             map.eachLayer(layer => {
                 if (layer instanceof L.Marker && layer !== userMarker) {
                     map.removeLayer(layer);
                 }
             });
 
-            // 5. 在地圖上標記最近的三個消防栓 (紅色圖標)
+            // 3. 計算所有消防栓距離並過濾出在 300 公尺內的目標
+            const nearbyHydrants = fireHydrantData.map(hydrant => {
+                const distanceKm = getDistance(userLat, userLng, hydrant.lat, hydrant.lng);
+                const distanceMeters = distanceKm * 1000; // 轉換為公尺
+                
+                return {
+                    ...hydrant,
+                    distance: distanceMeters 
+                };
+            // 🌟 核心過濾邏輯：只保留距離小於等於 300 公尺的目標
+            }).filter(hydrant => hydrant.distance <= SEARCH_RADIUS_METERS); 
+
+            // 4. 對篩選後的目標進行排序 (由近到遠，方便使用者查看)
+            nearbyHydrants.sort((a, b) => a.distance - b.distance); 
+
+            // 5. 設定地圖視角和縮放 (縮放級別 16 適合觀察 300-500 公尺範圍)
+            map.setView(userLatLng, 16); 
+            
+            // 6. 標記 300 公尺內的所有消防栓 (紅色圖標)
             const fireHydrantIcon = L.icon({
                 iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
                 shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -106,16 +113,15 @@
                 shadowSize: [41, 41]
             });
 
-            nearestHydrants.forEach((hydrant, index) => {
-                const distanceInMeters = (hydrant.distance * 1000).toFixed(0); // 轉換為公尺
+            nearbyHydrants.forEach((hydrant, index) => {
+                const distanceInMeters = hydrant.distance.toFixed(0); 
                 
-                // 🌟 核心修改點：建立 Google 地圖導航連結
-                // Google 地圖導航 URL 格式：從當前位置到 daddr (目的地址: 經緯度)
-                const googleMapsUrl = `http://maps.google.com/maps?daddr=${hydrant.lat},${hydrant.lng}`;
+                // 建立 Google 地圖導航連結
+                const googleMapsUrl = `http://googleusercontent.com/maps.google.com/4{hydrant.lat},${hydrant.lng}`;
                 
                 L.marker([hydrant.lat, hydrant.lng], { icon: fireHydrantIcon }).addTo(map)
                     .bindPopup(`
-                        <b>第 ${index + 1} 近的消防栓: ${hydrant.name}</b><br>
+                        <b>消防栓 #${index + 1}: ${hydrant.name}</b><br>
                         距離: **${distanceInMeters} 公尺**<br>
                         <hr style="margin: 5px 0;">
                         <a href="${googleMapsUrl}" target="_blank" 
@@ -125,6 +131,26 @@
                     `);
             });
             
+            // 7. 顯示結果提示
+            const resultCount = nearbyHydrants.length;
+            const message = resultCount > 0 
+                ? `在 ${SEARCH_RADIUS_METERS} 公尺內找到 ${resultCount} 個消防栓。`
+                : `在 ${SEARCH_RADIUS_METERS} 公尺內沒有找到任何消防栓。`;
+
+            // 為了方便使用者視覺化 300 公尺範圍，我們可以在使用者位置周圍繪製一個圓圈
+            L.circle(userLatLng, { 
+                radius: SEARCH_RADIUS_METERS, // 半徑 300 公尺
+                color: 'blue', 
+                fillColor: '#90b4e0', 
+                fillOpacity: 0.2,
+                weight: 2
+            }).addTo(map); 
+
+            L.popup()
+                .setLatLng(userLatLng)
+                .setContent(`<b>搜尋結果：</b>${message}`)
+                .openOn(map);
+
             if (fireHydrantData.length === 0) {
                  L.popup()
                     .setLatLng(userLatLng)
@@ -133,7 +159,7 @@
             }
         }
 
-        // 處理定位失敗的函式
+        // 處理定位失敗的函式 (保持不變)
         function onLocationError(error) {
             let errorMessage = "無法取得您的位置。請檢查您的定位設定是否開啟。";
             
@@ -150,10 +176,8 @@
 
         // ============== 應用程式啟動邏輯 (GeoJSON 資料載入) ==============
 
-        // 載入並解析 GeoJSON 檔案
         async function loadHydrantData() {
             try {
-                // 嘗試從 hydrants.geojson 檔案載入資料
                 const response = await fetch('hydrants.geojson'); 
                 
                 if (!response.ok) {
@@ -162,16 +186,13 @@
                 
                 const geoJsonData = await response.json();
                 
-                // 將 GeoJSON 格式轉換為程式碼需要的 { lat, lng, name } 陣列
                 const processedData = geoJsonData.features
                     .filter(feature => feature.geometry && feature.geometry.type === 'Point')
                     .map(feature => {
                         const coords = feature.geometry.coordinates;
                         return {
-                            // GeoJSON 座標順序是 [經度 (lng), 緯度 (lat)]
                             lat: coords[1], 
                             lng: coords[0],
-                            // 獲取 GeoJSON 屬性中的名稱，嘗試多種常見欄位
                             name: feature.properties.name || feature.properties.Name || feature.properties.title || '未知消防栓'
                         };
                     });
@@ -189,7 +210,6 @@
             }
         }
 
-        // 應用程式主要啟動點
         async function initApp() {
             const hydrantData = await loadHydrantData();
             
