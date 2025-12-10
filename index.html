@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📱 地址搜尋與即時定位 - 300 公尺消防栓</title>
+    <title>📱 300 公尺消防栓搜尋與導航</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha204-Jj0p59h61Hw84D76gX+rPzK52t/u3aFw10d0y7lU3Z55W6aD05k2F5k49E2b3I0tB"
         crossorigin=""/>
@@ -32,15 +32,15 @@
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
     <script>
-        // ============== 應用程式核心設定 ==============
+        // ============== 應用程式核心設定與全域變數 ==============
 
         const SEARCH_RADIUS_METERS = 300; // 核心參數：搜尋半徑 (公尺)
-        let watchId; // 🌟 新增：用於儲存 watchPosition 的 ID，以便停止追蹤
-        let isWatching = true; // 🌟 新增：追蹤狀態標記
+        let watchId; // 用於儲存 watchPosition 的 ID
+        let isWatching = true; // 追蹤狀態標記
         let hydrantData = []; // 儲存 GeoJSON 載入的資料
+        let userMarker; // 儲存使用者/搜尋位置標記
 
-        // ============== 變數與地圖初始化 ==============
-
+        // 初始化地圖 (預設視角)
         const map = L.map('map').setView([24.1500, 120.6800], 13);
 
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -48,10 +48,10 @@
             attribution: '© OpenStreetMap 貢獻者'
         }).addTo(map);
 
-        let userMarker;
 
         // ============== 距離計算函式 (Haversine 公式) ==============
         
+        // 用於計算地球上兩點間準確距離的數學公式 (結果為公里)。
         function getDistance(lat1, lon1, lat2, lon2) {
             const R = 6371; // 地球半徑 (公里)
             const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -65,15 +65,14 @@
         }
 
 
-        // ============== 定位與標記邏輯 (通用函式) ==============
+        // ============== 定位與標記邏輯 (通用函式，支援定位和地址搜尋) ==============
 
-        // 這個函式現在可以被即時定位或地址搜尋成功後呼叫
         function findAndMarkHydrants(lat, lng, sourceName = "您的目前位置") {
             const userLatLng = [lat, lng];
             
             // 移除舊的標記和圓圈
             map.eachLayer(layer => {
-                if (layer !== userMarker && layer !== map.tileLayer) {
+                if (layer !== map.tileLayer && !(layer instanceof L.Control)) {
                     map.removeLayer(layer);
                 }
             });
@@ -111,192 +110,6 @@
                 weight: 2
             }).addTo(map);
 
-            // 6. 標記消防栓
+            // 6. 標記消防栓並加入導航連結
             const fireHydrantIcon = L.icon({
-                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34],
-                shadowSize: [41, 41]
-            });
-
-            nearbyHydrants.forEach((hydrant, index) => {
-                const distanceInMeters = hydrant.distance.toFixed(0); 
-                
-                // 建立 Google 地圖導航連結
-                const googleMapsUrl = `http://googleusercontent.com/maps.google.com/5{hydrant.lat},${hydrant.lng}`;
-                
-                L.marker([hydrant.lat, hydrant.lng], { icon: fireHydrantIcon }).addTo(map)
-                    .bindPopup(`
-                        <b>消防栓 #${index + 1}: ${hydrant.name}</b><br>
-                        距離: **${distanceInMeters} 公尺**<br>
-                        <hr style="margin: 5px 0;">
-                        <a href="${googleMapsUrl}" target="_blank" 
-                           style="display: block; padding: 5px; background-color: #4285F4; color: white; text-align: center; text-decoration: none; border-radius: 3px; font-weight: bold;">
-                           🚗 開始導航 (Google Maps)
-                        </a>
-                    `);
-            });
-            
-            // 7. 顯示結果提示
-            const resultCount = nearbyHydrants.length;
-            const message = resultCount > 0 
-                ? `在 ${SEARCH_RADIUS_METERS} 公尺內找到 ${resultCount} 個消防栓。`
-                : `在 ${SEARCH_RADIUS_METERS} 公尺內沒有找到任何消防栓。`;
-
-            // 如果是即時定位追蹤，則不強制打開 Popup，避免持續干擾
-            if (sourceName !== "您的目前位置 (即時)") {
-                 L.popup()
-                    .setLatLng(userLatLng)
-                    .setContent(`<b>搜尋結果：</b>${message}`)
-                    .openOn(map);
-            }
-        }
-
-        // 🌟 處理即時定位成功的函式
-        function onLocationFound(pos) {
-            // 只有在追蹤狀態下才更新位置
-            if (isWatching) {
-                findAndMarkHydrants(pos.coords.latitude, pos.coords.longitude, "您的目前位置 (即時)");
-            }
-        }
-
-        // 處理定位失敗的函式 (保持不變)
-        function onLocationError(error) {
-            let errorMessage = "無法取得您的位置。請檢查您的定位設定是否開啟。";
-            
-            if (error.code === error.PERMISSION_DENIED) {
-                errorMessage = "您拒絕了定位請求。請允許瀏覽器使用您的位置。";
-                stopWatching(); // 拒絕時停止追蹤
-            }
-            
-            L.popup()
-                .setLatLng(map.getCenter())
-                .setContent(`定位失敗：${errorMessage}`)
-                .openOn(map);
-        }
-
-        // 🌟 新增：停止即時定位追蹤
-        function stopWatching() {
-            if (watchId) {
-                navigator.geolocation.clearWatch(watchId);
-                isWatching = false;
-                console.log("已停止即時定位追蹤。");
-                
-                // 提示使用者已停止
-                L.popup()
-                    .setLatLng(map.getCenter())
-                    .setContent("已停止即時定位追蹤。您現在可以使用地址搜尋功能。")
-                    .openOn(map);
-            }
-        }
-        
-        // 🌟 新增：啟動即時定位追蹤
-        function startWatching() {
-            if ("geolocation" in navigator) {
-                isWatching = true;
-                watchId = navigator.geolocation.watchPosition(
-                    onLocationFound, 
-                    onLocationError, 
-                    { 
-                        enableHighAccuracy: true, 
-                        timeout: 10000,          
-                        maximumAge: 0            
-                    }
-                );
-                console.log("已啟動即時定位追蹤。");
-            } else {
-                alert("您的瀏覽器不支援地理位置功能。");
-            }
-        }
-
-        // ============== 應用程式啟動邏輯 (GeoJSON 資料載入) ==============
-
-        async function loadHydrantData() {
-            try {
-                const response = await fetch('hydrants.geojson'); 
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}。請確認檔案是否存在並運行於伺服器。`);
-                }
-                
-                const geoJsonData = await response.json();
-                
-                return geoJsonData.features
-                    .filter(feature => feature.geometry && feature.geometry.type === 'Point')
-                    .map(feature => {
-                        const coords = feature.geometry.coordinates;
-                        return {
-                            lat: coords[1], 
-                            lng: coords[0],
-                            name: feature.properties.name || feature.properties.Name || feature.properties.title || '未知消防栓'
-                        };
-                    });
-            } catch (error) {
-                console.error("載入消防栓資料失敗:", error);
-                
-                L.popup()
-                    .setLatLng(map.getCenter())
-                    .setContent(`載入 GeoJSON 失敗：${error.message}`)
-                    .openOn(map);
-                return [];
-            }
-        }
-
-        // 應用程式主要啟動點
-        async function initApp() {
-            // 1. 載入資料並存入全域變數
-            hydrantData = await loadHydrantData();
-            
-            // 2. 🌟 新增：加入地址搜尋控制項
-            L.Control.geocoder({
-                placeholder: '輸入地址或地標...',
-                defaultMarkGeocode: false // 避免自動標記，由我們自己處理
-            }).on('markgeocode', function(e) {
-                // 停止即時追蹤，因為使用者正在手動搜尋位置
-                stopWatching(); 
-                
-                const center = e.geocode.center;
-                const name = e.geocode.name;
-                
-                // 使用搜尋到的經緯度呼叫函式
-                findAndMarkHydrants(center.lat, center.lng, `搜尋地點: ${name}`);
-            }).addTo(map);
-
-            // 3. 🌟 新增：加入停止追蹤按鈕 (自訂 Leaflet 控制項)
-            const StopControl = L.Control.extend({
-                options: {
-                    position: 'topright'
-                },
-                onAdd: function (map) {
-                    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-                    container.style.backgroundColor = 'white';
-                    container.style.padding = '10px';
-                    container.style.cursor = 'pointer';
-                    container.innerHTML = '🛑 停止即時定位';
-
-                    container.onclick = function(){
-                        stopWatching();
-                        // 改變按鈕顯示，例如變成「開始追蹤」
-                        container.innerHTML = '🟢 開始即時定位';
-                        container.onclick = function(){
-                            startWatching();
-                            container.innerHTML = '🛑 停止即時定位';
-                            container.onclick = arguments.callee; // 恢復停止功能
-                        }
-                    }
-                    return container;
-                }
-            });
-            map.addControl(new StopControl());
-
-            // 4. 🌟 啟動即時定位追蹤
-            startWatching();
-        }
-
-        initApp();
-    </script>
-
-</body>
-</html>
+                iconUrl: '
