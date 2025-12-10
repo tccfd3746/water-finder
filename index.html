@@ -33,7 +33,7 @@
     <script>
         // ============== 變數與地圖初始化 ==============
 
-        const map = L.map('map').setView([24.1500, 120.6800], 13); // 預設視角：台中市中心
+        const map = L.map('map').setView([24.1500, 120.6800], 13); // 預設視角
 
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
@@ -44,7 +44,7 @@
 
         // ============== 距離計算函式 (Haversine 公式) ==============
         
-        // 這是計算地球上兩點間準確距離的數學公式。
+        // 用於計算地球上兩點間準確距離的數學公式 (結果為公里)。
         function getDistance(lat1, lon1, lat2, lon2) {
             const R = 6371; // 地球半徑 (公里)
             const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -58,7 +58,7 @@
         }
 
 
-        // ============== 定位與標記邏輯 ==============
+        // ============== 定位與標記邏輯 (包含導航連結) ==============
 
         // 處理定位成功的函式：在這裡進行距離計算和標記
         function onLocationFound(pos, fireHydrantData) {
@@ -109,10 +109,19 @@
             nearestHydrants.forEach((hydrant, index) => {
                 const distanceInMeters = (hydrant.distance * 1000).toFixed(0); // 轉換為公尺
                 
+                // 🌟 核心修改點：建立 Google 地圖導航連結
+                // Google 地圖導航 URL 格式：從當前位置到 daddr (目的地址: 經緯度)
+                const googleMapsUrl = `http://maps.google.com/maps?daddr=${hydrant.lat},${hydrant.lng}`;
+                
                 L.marker([hydrant.lat, hydrant.lng], { icon: fireHydrantIcon }).addTo(map)
                     .bindPopup(`
                         <b>第 ${index + 1} 近的消防栓: ${hydrant.name}</b><br>
-                        距離: **${distanceInMeters} 公尺**
+                        距離: **${distanceInMeters} 公尺**<br>
+                        <hr style="margin: 5px 0;">
+                        <a href="${googleMapsUrl}" target="_blank" 
+                           style="display: block; padding: 5px; background-color: #4285F4; color: white; text-align: center; text-decoration: none; border-radius: 3px; font-weight: bold;">
+                           🚗 開始導航 (Google Maps)
+                        </a>
                     `);
             });
             
@@ -162,7 +171,7 @@
                             // GeoJSON 座標順序是 [經度 (lng), 緯度 (lat)]
                             lat: coords[1], 
                             lng: coords[0],
-                            // 獲取 GeoJSON 屬性中的名稱
+                            // 獲取 GeoJSON 屬性中的名稱，嘗試多種常見欄位
                             name: feature.properties.name || feature.properties.Name || feature.properties.title || '未知消防栓'
                         };
                     });
